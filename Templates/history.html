@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test History</title>
+</head>
+<body>
+
+<h2>Your Test History</h2>
+
+<table border="1">
+    <tr>
+        <th>Test ID</th>
+        <th>Score</th>
+        <th>Date</th>
+    </tr>
+
+    {% for r in results %}
+    <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.score }}</td>
+        <td>{{ r.date }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<br>
+<a href="/student">Back to Test</a>
+
+</body>
+</html>

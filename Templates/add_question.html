@@ -1,0 +1,24 @@
+<head>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<h2>Add Question</h2>
+<form method="POST">
+    Question:<br>
+    <textarea name="question"></textarea><br><br>
+
+    A: <input name="a"><br>
+    B: <input name="b"><br>
+    C: <input name="c"><br>
+    D: <input name="d"><br><br>
+
+    Correct Option:
+    <select name="correct">
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="C">C</option>
+        <option value="D">D</option>
+    </select><br><br>
+
+    <button type="submit">Save Question</button>
+</form>

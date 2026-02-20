@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <head>
+    <title>Give Test</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <script>
+        let timeLeft = 60; // seconds (you can change later)
+
+        function startTimer() {
+            const timer = setInterval(() => {
+                document.getElementById("timer").innerText = timeLeft;
+
+                timeLeft--;
+
+                if (timeLeft < 0) {
+                    clearInterval(timer);
+                    document.getElementById("quizForm").submit();
+                }
+            }, 1000);
+        }
+
+        window.onload = startTimer;
+    </script>
+</head>
+
+</head>
+<body>
+
+<h2>Quiz Test</h2>
+<h3>Time Left: <span id="timer">60</span> sec</h3>
+
+<a href="/logout">Logout</a>
+
+
+<a href="/history">View Test History</a>
+<br><br>
+
+
+<form id="quizForm" method="POST" action="/submit_test">
+
+    {% for q in questions %}
+    <p><b>{{ loop.index }}. {{ q.question }}</b></p>
+
+    {% for opt in q.shuffled_options %}
+        <input type="radio" name="q{{ q.id }}" value="{{ opt[0] }}">
+        {{ opt[1] }}<br>
+    {% endfor %}
+
+    <br>
+{% endfor %}
+
+
+    <button type="submit">Submit Test</button>
+
+</form>
+
+</body>
+</html>
