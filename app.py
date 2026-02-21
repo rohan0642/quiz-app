@@ -1,16 +1,87 @@
 from flask import Flask, render_template, request, redirect, session
 import sqlite3
 import random
+import os
 
 app = Flask(__name__)
 app.secret_key = "secret123"
 
+DB_PATH = "quiz_app.db"
+
+
+# ---------- DATABASE INIT (VERY IMPORTANT FOR RENDER) ----------
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # users
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        email TEXT UNIQUE,
+        password TEXT,
+        role TEXT
+    )
+    """)
+
+    # questions
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question TEXT,
+        opt_a TEXT,
+        opt_b TEXT,
+        opt_c TEXT,
+        opt_d TEXT,
+        correct_opt TEXT,
+        test_id INTEGER DEFAULT 1
+    )
+    """)
+
+    # results
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER,
+        test_id INTEGER,
+        score INTEGER,
+        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # answers
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS answers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        result_id INTEGER,
+        question_id INTEGER,
+        selected TEXT,
+        is_correct INTEGER
+    )
+    """)
+
+    # ✅ create admin if not exists
+    c.execute("SELECT * FROM users WHERE role='admin'")
+    if not c.fetchone():
+        c.execute(
+            "INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)",
+            ("Admin", "admin@gmail.com", "1234", "admin"),
+        )
+
+    conn.commit()
+    conn.close()
+
 
 # ---------- DATABASE HELPER ----------
 def get_db():
-    conn = sqlite3.connect("quiz_app.db")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# 🔥 RUN INIT ON STARTUP (CRITICAL FOR RENDER)
+init_db()
 
 
 # ---------- LOGIN ----------
@@ -63,7 +134,6 @@ def student():
     db = get_db()
     cursor = db.cursor()
 
-    # wrong question logic
     cursor.execute("""
         SELECT question_id FROM answers
         JOIN results ON answers.result_id = results.id
@@ -83,13 +153,9 @@ def student():
     rows = cursor.fetchall()
     db.close()
 
-    # convert rows → mutable dicts
     questions = [dict(row) for row in rows]
-
-    # shuffle questions
     random.shuffle(questions)
 
-    # shuffle options
     for q in questions:
         opts = [
             ('A', q['opt_a']),
@@ -177,7 +243,6 @@ def submit_test():
     questions = cursor.fetchall()
 
     score = 0
-
     for q in questions:
         selected = request.form.get(f"q{q['id']}")
         if selected == q["correct_opt"]:
@@ -207,7 +272,7 @@ def history():
 
     cursor.execute(
         "SELECT * FROM results WHERE student_id=? ORDER BY date DESC",
-        (student_id,)
+        (student_id,),
     )
 
     results = cursor.fetchall()
