@@ -1,32 +1,34 @@
 from flask import Flask, render_template, request, redirect, session
-import mysql.connector
+import sqlite3
 import random
 
 app = Flask(__name__)
 app.secret_key = "secret123"
 
-# MySQL connection
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="root0000",
-    database="quiz_app"
-)
 
-cursor = db.cursor(dictionary=True)
+# ---------- DATABASE HELPER ----------
+def get_db():
+    conn = sqlite3.connect("quiz_app.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
+# ---------- LOGIN ----------
 @app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form["email"]
         password = request.form["password"]
 
+        db = get_db()
+        cursor = db.cursor()
+
         cursor.execute(
-            "SELECT * FROM users WHERE email=%s AND password=%s",
+            "SELECT * FROM users WHERE email=? AND password=?",
             (email, password),
         )
         user = cursor.fetchone()
+        db.close()
 
         if user:
             session["user_id"] = user["id"]
@@ -42,6 +44,7 @@ def login():
     return render_template("login.html")
 
 
+# ---------- ADMIN ----------
 @app.route("/admin")
 def admin():
     if session.get("role") != "admin":
@@ -49,8 +52,7 @@ def admin():
     return render_template("admin_dashboard.html")
 
 
-import random
-
+# ---------- STUDENT TEST ----------
 @app.route("/student")
 def student():
     if session.get("role") != "student":
@@ -58,30 +60,36 @@ def student():
 
     student_id = session["user_id"]
 
-    # wrong question logic (keep yours)
+    db = get_db()
+    cursor = db.cursor()
+
+    # wrong question logic
     cursor.execute("""
         SELECT question_id FROM answers
         JOIN results ON answers.result_id = results.id
-        WHERE results.student_id = %s AND is_correct = 0
+        WHERE results.student_id = ? AND is_correct = 0
     """, (student_id,))
     wrong_ids = [row["question_id"] for row in cursor.fetchall()]
 
     if wrong_ids:
-        format_strings = ','.join(['%s'] * len(wrong_ids))
+        placeholders = ",".join(["?"] * len(wrong_ids))
         cursor.execute(
-            f"SELECT * FROM questions WHERE id IN ({format_strings})",
-            tuple(wrong_ids)
+            f"SELECT * FROM questions WHERE id IN ({placeholders})",
+            wrong_ids
         )
     else:
         cursor.execute("SELECT * FROM questions WHERE test_id = 1")
 
+    rows = cursor.fetchall()
+    db.close()
 
-    questions = cursor.fetchall()
+    # convert rows → mutable dicts
+    questions = [dict(row) for row in rows]
 
-    # ✅ SHUFFLE QUESTIONS
+    # shuffle questions
     random.shuffle(questions)
 
-    # ✅ SHUFFLE OPTIONS FOR EACH QUESTION
+    # shuffle options
     for q in questions:
         opts = [
             ('A', q['opt_a']),
@@ -95,9 +103,7 @@ def student():
     return render_template("student_test.html", questions=questions)
 
 
-
-
-
+# ---------- ADD STUDENT ----------
 @app.route("/add_student", methods=["GET", "POST"])
 def add_student():
     if session.get("role") != "admin":
@@ -108,17 +114,23 @@ def add_student():
         email = request.form["email"]
         password = request.form["password"]
 
+        db = get_db()
+        cursor = db.cursor()
+
         cursor.execute(
-            "INSERT INTO users (name, email, password, role) VALUES (%s,%s,%s,'student')",
+            "INSERT INTO users (name, email, password, role) VALUES (?,?,?,'student')",
             (name, email, password),
         )
+
         db.commit()
+        db.close()
 
         return "Student added successfully!"
 
     return render_template("add_student.html")
 
 
+# ---------- ADD QUESTION ----------
 @app.route("/add_question", methods=["GET", "POST"])
 def add_question():
     if session.get("role") != "admin":
@@ -132,19 +144,25 @@ def add_question():
         d = request.form["d"]
         correct = request.form["correct"]
 
+        db = get_db()
+        cursor = db.cursor()
+
         cursor.execute(
             """INSERT INTO questions
             (question, opt_a, opt_b, opt_c, opt_d, correct_opt)
-            VALUES (%s,%s,%s,%s,%s,%s)""",
+            VALUES (?,?,?,?,?,?)""",
             (question, a, b, c, d, correct),
         )
+
         db.commit()
+        db.close()
 
         return "Question added!"
 
     return render_template("add_question.html")
 
 
+# ---------- SUBMIT TEST ----------
 @app.route("/submit_test", methods=["POST"])
 def submit_test():
     if session.get("role") != "student":
@@ -152,28 +170,31 @@ def submit_test():
 
     student_id = session["user_id"]
 
-    cursor.execute("SELECT * FROM questions")
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute("SELECT * FROM questions WHERE test_id = 1")
     questions = cursor.fetchall()
-    random.shuffle(questions)
 
     score = 0
 
     for q in questions:
         selected = request.form.get(f"q{q['id']}")
-
         if selected == q["correct_opt"]:
             score += 1
 
-    # store result
     cursor.execute(
-        "INSERT INTO results (student_id, test_id, score) VALUES (%s, %s, %s)",
+        "INSERT INTO results (student_id, test_id, score) VALUES (?,?,?)",
         (student_id, 1, score),
     )
+
     db.commit()
+    db.close()
 
     return f"Your Score: {score} / {len(questions)}"
 
 
+# ---------- HISTORY ----------
 @app.route("/history")
 def history():
     if session.get("role") != "student":
@@ -181,17 +202,21 @@ def history():
 
     student_id = session["user_id"]
 
+    db = get_db()
+    cursor = db.cursor()
+
     cursor.execute(
-        "SELECT * FROM results WHERE student_id=%s ORDER BY date DESC",
+        "SELECT * FROM results WHERE student_id=? ORDER BY date DESC",
         (student_id,)
     )
 
     results = cursor.fetchall()
+    db.close()
 
     return render_template("history.html", results=results)
 
 
-
+# ---------- LOGOUT ----------
 @app.route("/logout")
 def logout():
     session.clear()
